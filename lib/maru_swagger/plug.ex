@@ -3,6 +3,8 @@ defmodule MaruSwagger.Plug do
   alias MaruSwagger.ConfigStruct
   alias Plug.Conn
 
+  alias Maru.Struct.Parameter.Information
+
   def init(opts) do
     ConfigStruct.from_opts(opts)
   end
@@ -16,9 +18,78 @@ defmodule MaruSwagger.Plug do
     |> Conn.halt
   end
   def call(conn, _) do
-    conn |> Conn.put_resp_header("access-control-allow-origin", "*")
+    # TODO: figure out why we'd want to modify conn for other paths.
+    #conn |> Conn.put_resp_header("access-control-allow-origin", "*")
+    conn
   end
 
+  # -------- ----- --- -- - -  -   -     -        -
+  # (move this to another file?)
+
+  # A route.parameter.runtime is of AST type.
+  # Within it, there are validate_func bodies, and within those,
+  #  we can grab allowed values for atom types.
+  # Unhandled edge case: nested params with same name in multiple places.
+  defp get_atom_param_allowed_vals(ast) do
+    # Within the runtime AST, there are a couple tuples relatively unique
+    #  to the body of a :validate_func that we can match on:
+    maru_validate_tuple = {:., [], [Maru.Validations.Values, :validate_param!]}
+    maru_param_metadata = {:value, [], Maru.Builder.Params}
+
+    # As we walk over the AST:
+    # - always return the original form unchanged
+    # - if we match on a param & allowed values pair, grab and merge into acc
+    walk_capturing_param_kw_and_vals = fn
+      ({^maru_validate_tuple, [],
+        [param_kw,
+         ^maru_param_metadata,
+         [_ | _]=param_vs] # ensure list, not tuple (want atom values, not integer)
+       }=form, acc) -> {form, Map.merge(acc, %{param_kw => param_vs})}
+      (form, acc) -> {form, acc}
+    end
+
+    {_, acc} = Macro.postwalk(ast, %{}, walk_capturing_param_kw_and_vals)
+    acc
+  end
+
+  # Nonnested parameter:
+  defp cast_atom_to_enum(
+    {atom_k, vs},
+    %Information{type: "atom",
+             children: [],
+            attr_name: attr
+    }=info
+  ) do # that matches the key:
+    if attr == atom_k do
+      Map.merge(info, %{type: "string", enum: vs})
+    else # that doesn't match:
+      info
+    end
+  end
+  # Nested parameter; recurse through child parameters:
+  defp cast_atom_to_enum(
+    k_to_vs,
+    %Information{type: "map",
+             children: children
+    }=info
+  ) do
+    Map.merge(info, %{children: Enum.map(children, &cast_atom_to_enum(k_to_vs, &1))})
+  end
+  # noop for remainder (parameter neither nested nor of atom type):
+  defp cast_atom_to_enum(_, info), do: info
+
+  defp cast_atom_parameters_to_enums({param_info, atom_ks_to_allowed_values}) do
+    Enum.reduce(atom_ks_to_allowed_values, param_info, &cast_atom_to_enum/2)
+  end
+
+  defp modify_parameters_for_atoms(route) do
+    route.parameters
+    |> Enum.map(&{&1.information, get_atom_param_allowed_vals(&1.runtime)})
+    |> Enum.map(&cast_atom_parameters_to_enums/1)
+  end
+
+  #
+  # -------- ----- --- -- - -  -   -     -        -
 
   def generate(%ConfigStruct{}=config) do
     c = (Application.get_env(:maru, config.module) || [])[:versioning] || []
@@ -26,7 +97,8 @@ defmodule MaruSwagger.Plug do
     routes =
       config.module.__routes__
       |> Enum.map(fn route ->
-        parameters = Enum.map(route.parameters, &(&1.information))
+        #parameters = Enum.map(route.parameters, &(&1.information))
+        parameters = modify_parameters_for_atoms(route)
         %{ route | parameters: parameters }
       end)
     tags =

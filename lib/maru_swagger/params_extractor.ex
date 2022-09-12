@@ -4,7 +4,10 @@ defmodule MaruSwagger.ParamsExtractor do
 
   defmodule NonGetBodyParamsGenerator do
     def generate(param_list, path) do
-      {path_param_list, body_param_list} = param_list |> MaruSwagger.ParamsExtractor.filter_information |> Enum.partition(&(&1.attr_name in path))
+      {path_param_list, body_param_list} =
+        param_list
+        |> MaruSwagger.ParamsExtractor.filter_information
+        |> Enum.partition(&(&1.attr_name in path))
       [ format_body_params(body_param_list) |
         format_path_params(path_param_list)
       ]
@@ -25,7 +28,7 @@ defmodule MaruSwagger.ParamsExtractor do
            type:        param.type,
            required:    param.required,
            in:          "path",
-         }
+        } |> MaruSwagger.ParamsExtractor.inject_enum(param)
       end)
     end
 
@@ -73,6 +76,7 @@ defmodule MaruSwagger.ParamsExtractor do
          type:        type,
          required:    param.required,
       }
+      |> MaruSwagger.ParamsExtractor.inject_enum(param)
     end
 
   end
@@ -87,7 +91,7 @@ defmodule MaruSwagger.ParamsExtractor do
            type:        param.type,
            required:    param.required,
            in:          param.attr_name in path && "path" || "formData",
-         }
+        } |> MaruSwagger.ParamsExtractor.inject_enum(param)
       end)
     end
   end
@@ -97,6 +101,17 @@ defmodule MaruSwagger.ParamsExtractor do
     extract_params(%{ep | method: "MATCH"}, config)
   end
 
+  # If there is an :enum entry, we want to preserve it.
+  def inject_enum(map, param) do
+    enum = Map.get(param, :enum) # could be nil
+    if enum do
+      Map.merge(map, %{enum: enum})
+    else
+      map
+    end
+  end
+  # TODO - see if we can generalize this for other keys, like format.
+
   def extract_params(%Route{method: "GET", path: path, parameters: parameters}, _config) do
     for param <- parameters do
       %{ name:        param.param_key,
@@ -104,7 +119,7 @@ defmodule MaruSwagger.ParamsExtractor do
          required:    param.required,
          type:        param.type,
          in:          param.attr_name in path && "path" || "query",
-      }
+      } |> inject_enum(param)
     end
   end
   def extract_params(%Route{method: "GET"}, _config), do: []
