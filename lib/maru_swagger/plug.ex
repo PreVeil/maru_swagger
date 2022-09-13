@@ -52,29 +52,40 @@ defmodule MaruSwagger.Plug do
     acc
   end
 
-  # Nonnested parameter:
-  defp cast_atoms_to_enums(atom_keys_to_allowed_values,
-                         %Information{type: "atom",
-                                  children: [],
-                                 attr_name: attr}=info)
-  do
-    vs = atom_keys_to_allowed_values[attr]
-    if vs do # this atom param matches, cast it to enum:
-      Map.merge(info, %{type: "string", enum: vs})
-    else # or it doesn't, leave it unchanged:
-      info
+  # Navigate parameter information (and potential children):
+  defp postwalk_params(%Information{type: "map", children: children}=info, f) do
+    info = f.(info)
+    children = Enum.map(children, &postwalk_params(&1, f))
+    Map.merge(info, %{children: children})
+    # With this merge order, children may not be modified at the parent level.
+    # (Any modifications that are done to them will be overwritten.)
+  end
+  defp postwalk_params(info, f), do: f.(info)
+  # Separating the navigation from the operation allows us to compose
+  #  multiple operators, applying all of them but only navigating once.
+
+  # Here's one operation:
+  defp cast_atoms_to_enums(atom_keys_to_allowed_values, info) do
+    cast_atom_walk_f = fn
+      %Information{type: "atom", children: [], attr_name: attr}=info -> (
+        vs = atom_keys_to_allowed_values[attr]
+        if vs do # this atom param matches, cast it to enum:
+          Map.merge(info, %{type: "string", enum: vs})
+        else # or it doesn't, leave it unchanged:
+          info
+        end)
+      info -> info
     end
+
+    postwalk_params(info, cast_atom_walk_f)
   end
-  # Nested parameter; recurse through child parameters:
-  defp cast_atoms_to_enums(atom_keys_to_allowed_values,
-                         %Information{type: "map",
-                                  children: children}=info)
-  do
-    partial_recur = &cast_atoms_to_enums(atom_keys_to_allowed_values, &1)
-    Map.merge(info, %{children: Enum.map(children, partial_recur)})
-  end
-  # noop for remainder (parameter neither nested nor of atom type):
-  defp cast_atoms_to_enums(_, info), do: info
+  # TODO: compose with other operations:
+  # - type transformations based on initial type
+  #   + mapt -> {"type":"object", "additional_properties":true} (arbitrary JSON object)
+  #   + uuid -> {"type":"string", "format":"uuid"}
+  # - type transformations based on name
+  #   + [various names] -> {"type":"string","format":"byte"}
+  # TODO: refactor to load any use case specific transformations dynamically.
 
   defp modify_parameters_for_atoms(route) do
     route.parameters
