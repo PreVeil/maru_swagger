@@ -28,7 +28,7 @@ defmodule MaruSwagger.ParamsExtractor do
            type:        param.type,
            required:    param.required,
            in:          "path",
-        } |> MaruSwagger.ParamsExtractor.inject_enum(param)
+        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
       end)
     end
 
@@ -76,7 +76,7 @@ defmodule MaruSwagger.ParamsExtractor do
          type:        type,
          required:    param.required,
       }
-      |> MaruSwagger.ParamsExtractor.inject_enum(param)
+      |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
     end
 
   end
@@ -91,7 +91,7 @@ defmodule MaruSwagger.ParamsExtractor do
            type:        param.type,
            required:    param.required,
            in:          param.attr_name in path && "path" || "formData",
-        } |> MaruSwagger.ParamsExtractor.inject_enum(param)
+        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
       end)
     end
   end
@@ -102,7 +102,7 @@ defmodule MaruSwagger.ParamsExtractor do
   end
 
   # If there is an :enum entry, we want to preserve it.
-  def inject_enum(map, param) do
+  defp inject_enum(map, param) do
     enum = Map.get(param, :enum) # could be nil
     if enum do
       Map.merge(map, %{enum: enum})
@@ -110,7 +110,32 @@ defmodule MaruSwagger.ParamsExtractor do
       map
     end
   end
-  # TODO - see if we can generalize this for other keys, like format.
+
+  defp inject_format(map, param) do
+    format = Map.get(param, :format) # could be nil
+    if format do
+      Map.merge(map, %{format: format})
+    else
+      map
+    end
+  end
+
+  defp inject_additional_properties(map, param) do
+    ap = Map.get(param, :additional_properties) # could be nil
+    if ap do
+      Map.merge(map, %{additional_properties: ap})
+    else
+      map
+    end
+  end
+
+  def inject_opt_keys(map, param) do
+    map
+    |> inject_enum(param)
+    |> inject_format(param)
+    |> inject_additional_properties(param)
+  end
+  # FIXME: remove duplication across fns above
 
   def extract_params(%Route{method: "GET", path: path, parameters: parameters}, _config) do
     for param <- parameters do
@@ -119,7 +144,7 @@ defmodule MaruSwagger.ParamsExtractor do
          required:    param.required,
          type:        param.type,
          in:          param.attr_name in path && "path" || "query",
-      } |> inject_enum(param)
+      } |> inject_opt_keys(param)
     end
   end
   def extract_params(%Route{method: "GET"}, _config), do: []

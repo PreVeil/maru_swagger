@@ -3,8 +3,6 @@ defmodule MaruSwagger.Plug do
   alias MaruSwagger.ConfigStruct
   alias Plug.Conn
 
-  alias Maru.Struct.Parameter.Information
-
   def init(opts) do
     ConfigStruct.from_opts(opts)
   end
@@ -53,7 +51,7 @@ defmodule MaruSwagger.Plug do
   end
 
   # Navigate parameter information (and potential children):
-  defp postwalk_params(%Information{type: "map", children: children}=info, f) do
+  defp postwalk_params(%{type: "map", children: children}=info, f) do
     info = f.(info)
     children = Enum.map(children, &postwalk_params(&1, f))
     Map.merge(info, %{children: children})
@@ -65,31 +63,54 @@ defmodule MaruSwagger.Plug do
   #  multiple operators, applying all of them but only navigating once.
 
   # Here's one operation:
-  defp cast_atoms_to_enums(atom_keys_to_allowed_values, info) do
-    cast_atom_walk_f = fn
-      %Information{type: "atom", children: [], attr_name: attr}=info -> (
-        vs = atom_keys_to_allowed_values[attr]
-        if vs do # this atom param matches, cast it to enum:
-          Map.merge(info, %{type: "string", enum: vs})
-        else # or it doesn't, leave it unchanged:
-          info
-        end)
+  # (it requires additional info to work)
+  defp make_cast_atoms_to_enums(atom_keys_to_allowed_values) do
+    fn %{type: "atom", children: [], attr_name: attr}=info -> (
+      vs = atom_keys_to_allowed_values[attr]
+      if vs do # this atom param matches, cast it to enum:
+        Map.merge(info, %{type: "string", enum: vs})
+      else # or it doesn't, leave it unchanged:
+        info
+      end)
       info -> info
     end
-
-    postwalk_params(info, cast_atom_walk_f)
   end
-  # TODO: compose with other operations:
-  # - type transformations based on initial type
-  #   + mapt -> {"type":"object", "additional_properties":true} (arbitrary JSON object)
-  #   + uuid -> {"type":"string", "format":"uuid"}
-  # - type transformations based on name
-  #   + [various names] -> {"type":"string","format":"byte"}
-  # TODO: refactor to load any use case specific transformations dynamically.
 
-  defp modify_parameters_for_atoms(route) do
+  defp cast_mapt_to_json(%{type: "mapt", children: []}=info) do
+    Map.merge(info, %{type: "object", additional_properties: true})
+  end
+  defp cast_mapt_to_json(info), do: info
+
+  defp cast_uuid_to_string_format(%{type: "uuid", children: []}=info) do
+    Map.merge(info, %{type: "string", format: "uuid"})
+  end
+  defp cast_uuid_to_string_format(info), do: info
+
+  # Only works for single-arg functions
+  defp comp(f, g) do
+    fn arg -> g.(f.(arg)) end
+  end
+  defp r_comp([_ | _]=functions) do
+    Enum.reduce(functions, &comp/2)
+  end
+
+  defp modify_parameters_types(route) do
     route.parameters
-    |> Enum.map(&cast_atoms_to_enums(runtime_to_atom_values(&1.runtime), &1.information))
+    |> Enum.map(fn parameter ->
+      rt = parameter.runtime
+      atom_values = runtime_to_atom_values(rt)
+      cast_atoms_to_enums = make_cast_atoms_to_enums(atom_values)
+      type_transforms = [
+        &cast_mapt_to_json/1,
+        &cast_uuid_to_string_format/1,
+        # TODO: take above fns from config, rather than hardcoding.
+        # (That way users can define custom transforms, based on name or type.)
+        cast_atoms_to_enums
+      ]
+      xf = r_comp(type_transforms)
+      parameter.information
+      |> postwalk_params(xf)
+    end)
   end
 
   #
@@ -102,7 +123,8 @@ defmodule MaruSwagger.Plug do
       config.module.__routes__
       |> Enum.map(fn route ->
         #parameters = Enum.map(route.parameters, &(&1.information))
-        parameters = modify_parameters_for_atoms(route)
+        #parameters = modify_parameters_for_atoms(route)
+        parameters = modify_parameters_types(route)
         %{ route | parameters: parameters }
       end)
     tags =
