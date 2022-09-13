@@ -30,7 +30,7 @@ defmodule MaruSwagger.Plug do
   # Within it, there are validate_func bodies, and within those,
   #  we can grab allowed values for atom types.
   # Unhandled edge case: nested params with same name in multiple places.
-  defp get_atom_param_allowed_vals(ast) do
+  defp runtime_to_atom_values(ast) do
     # Within the runtime AST, there are a couple tuples relatively unique
     #  to the body of a :validate_func that we can match on:
     maru_validate_tuple = {:., [], [Maru.Validations.Values, :validate_param!]}
@@ -53,39 +53,32 @@ defmodule MaruSwagger.Plug do
   end
 
   # Nonnested parameter:
-  defp cast_atom_to_enum(
-    {atom_k, vs},
-    %Information{type: "atom",
-             children: [],
-            attr_name: attr
-    }=info
-  ) do # that matches the key:
-    if attr == atom_k do
+  defp cast_atoms_to_enums(atom_keys_to_allowed_values,
+                         %Information{type: "atom",
+                                  children: [],
+                                 attr_name: attr}=info)
+  do
+    vs = atom_keys_to_allowed_values[attr]
+    if vs do # this atom param matches, cast it to enum:
       Map.merge(info, %{type: "string", enum: vs})
-    else # that doesn't match:
+    else # or it doesn't, leave it unchanged:
       info
     end
   end
   # Nested parameter; recurse through child parameters:
-  defp cast_atom_to_enum(
-    k_to_vs,
-    %Information{type: "map",
-             children: children
-    }=info
-  ) do
-    Map.merge(info, %{children: Enum.map(children, &cast_atom_to_enum(k_to_vs, &1))})
+  defp cast_atoms_to_enums(atom_keys_to_allowed_values,
+                         %Information{type: "map",
+                                  children: children}=info)
+  do
+    partial_recur = &cast_atoms_to_enums(atom_keys_to_allowed_values, &1)
+    Map.merge(info, %{children: Enum.map(children, partial_recur)})
   end
   # noop for remainder (parameter neither nested nor of atom type):
-  defp cast_atom_to_enum(_, info), do: info
-
-  defp cast_atom_parameters_to_enums({param_info, atom_ks_to_allowed_values}) do
-    Enum.reduce(atom_ks_to_allowed_values, param_info, &cast_atom_to_enum/2)
-  end
+  defp cast_atoms_to_enums(_, info), do: info
 
   defp modify_parameters_for_atoms(route) do
     route.parameters
-    |> Enum.map(&{&1.information, get_atom_param_allowed_vals(&1.runtime)})
-    |> Enum.map(&cast_atom_parameters_to_enums/1)
+    |> Enum.map(&cast_atoms_to_enums(runtime_to_atom_values(&1.runtime), &1.information))
   end
 
   #
