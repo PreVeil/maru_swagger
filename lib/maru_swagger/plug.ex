@@ -76,40 +76,19 @@ defmodule MaruSwagger.Plug do
     end
   end
 
-  defp cast_mapt_to_json(%{type: "mapt", children: []}=info) do
-    Map.merge(info, %{type: "object", additional_properties: true})
-  end
-  defp cast_mapt_to_json(info), do: info
-
-  defp cast_uuid_to_string_format(%{type: "uuid", children: []}=info) do
-    Map.merge(info, %{type: "string", format: "uuid"})
-  end
-  defp cast_uuid_to_string_format(info), do: info
-
-  # Only works for single-arg functions
-  defp comp(f, g) do
-    fn arg -> g.(f.(arg)) end
-  end
-  defp r_comp([_ | _]=functions) do
-    Enum.reduce(functions, &comp/2)
-  end
-
-  defp modify_parameters_types(route) do
+  defp modify_parameters_types(route, user_type_transform_fn) do
+    user_type_transform_fn = user_type_transform_fn || &(&1)
     route.parameters
     |> Enum.map(fn parameter ->
       rt = parameter.runtime
       atom_values = runtime_to_atom_values(rt)
       cast_atoms_to_enums = make_cast_atoms_to_enums(atom_values)
-      type_transforms = [
-        &cast_mapt_to_json/1,
-        &cast_uuid_to_string_format/1,
-        # TODO: take above fns from config, rather than hardcoding.
-        # (That way users can define custom transforms, based on name or type.)
-        cast_atoms_to_enums
-      ]
-      xf = r_comp(type_transforms)
-      parameter.information
-      |> postwalk_params(xf)
+      walk_fn = fn info ->
+        info
+        |> cast_atoms_to_enums.()
+        |> user_type_transform_fn.()
+      end
+      postwalk_params(parameter.information, walk_fn)
     end)
   end
 
@@ -119,12 +98,11 @@ defmodule MaruSwagger.Plug do
   def generate(%ConfigStruct{}=config) do
     c = (Application.get_env(:maru, config.module) || [])[:versioning] || []
     adapter = Maru.Builder.Versioning.get_adapter(c[:using])
+    %ConfigStruct{type_transform: user_type_transform_fn} = config
     routes =
       config.module.__routes__
       |> Enum.map(fn route ->
-        #parameters = Enum.map(route.parameters, &(&1.information))
-        #parameters = modify_parameters_for_atoms(route)
-        parameters = modify_parameters_types(route)
+        parameters = modify_parameters_types(route, user_type_transform_fn)
         %{ route | parameters: parameters }
       end)
     tags =

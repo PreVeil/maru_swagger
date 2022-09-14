@@ -3,13 +3,13 @@ defmodule MaruSwagger.ParamsExtractor do
   alias Maru.Struct.Dependent.Information, as: DI
 
   defmodule NonGetBodyParamsGenerator do
-    def generate(param_list, path) do
+    def generate(param_list, path, config) do
       {path_param_list, body_param_list} =
         param_list
         |> MaruSwagger.ParamsExtractor.filter_information
         |> Enum.partition(&(&1.attr_name in path))
-      [ format_body_params(body_param_list) |
-        format_path_params(path_param_list)
+      [ format_body_params(body_param_list, config) |
+        format_path_params(path_param_list, config)
       ]
     end
 
@@ -21,20 +21,20 @@ defmodule MaruSwagger.ParamsExtractor do
        }
     end
 
-    defp format_path_params(param_list) do
+    defp format_path_params(param_list, config) do
       Enum.map(param_list, fn param ->
         %{ name:        param.param_key,
            description: param.desc || "",
            type:        param.type,
            required:    param.required,
            in:          "path",
-        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
+        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
       end)
     end
 
-    defp format_body_params(param_list) do
+    defp format_body_params(param_list, config) do
       param_list
-      |> Enum.map(&format_param/1)
+      |> Enum.map(&format_param(&1, config))
       |> case do
         []     -> default_body()
         params ->
@@ -46,43 +46,43 @@ defmodule MaruSwagger.ParamsExtractor do
     end
 
 
-    defp format_param(param) do
-      {param.param_key, do_format_param(param.type, param)}
+    defp format_param(param, config) do
+      {param.param_key, do_format_param(param.type, param, config)}
     end
 
-    defp do_format_param("map", param) do
+    defp do_format_param("map", param, config) do
       %{ type: "object",
-         properties: param.children |> Enum.map(&format_param/1) |> Enum.into(%{}),
+         properties: param.children |> Enum.map(&format_param(&1, config)) |> Enum.into(%{}),
       }
     end
 
-    defp do_format_param("list", param) do
+    defp do_format_param("list", param, config) do
       %{ type: "array",
          items: %{
            type: "object",
-           properties: param.children |> Enum.map(&format_param/1) |> Enum.into(%{}),
+           properties: param.children |> Enum.map(&format_param(&1, config)) |> Enum.into(%{}),
          }
       }
     end
 
-    defp do_format_param({:list, type}, param) do
+    defp do_format_param({:list, type}, param, config) do
       %{ type: "array",
-         items: do_format_param(type, param),
+         items: do_format_param(type, param, config),
       }
     end
 
-    defp do_format_param(type, param) do
+    defp do_format_param(type, param, config) do
       %{ description: param.desc || "",
          type:        type,
          required:    param.required,
       }
-      |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
+      |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
     end
 
   end
 
   defmodule NonGetFormDataParamsGenerator do
-    def generate(param_list, path) do
+    def generate(param_list, path, config) do
       param_list
       |> MaruSwagger.ParamsExtractor.filter_information
       |> Enum.map(fn param ->
@@ -91,9 +91,15 @@ defmodule MaruSwagger.ParamsExtractor do
            type:        param.type,
            required:    param.required,
            in:          param.attr_name in path && "path" || "formData",
-        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param)
+        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
       end)
     end
+  end
+
+  def inject_opt_keys(map, param, config) do
+    opts = [:enum | (Map.get(config, :param_opt_keys) || [])]
+    opts_map = Map.take(param, opts)
+    Map.merge(map, opts_map)
   end
 
   alias Maru.Struct.Route
@@ -101,50 +107,14 @@ defmodule MaruSwagger.ParamsExtractor do
     extract_params(%{ep | method: "MATCH"}, config)
   end
 
-  # If there is an :enum entry, we want to preserve it.
-  defp inject_enum(map, param) do
-    enum = Map.get(param, :enum) # could be nil
-    if enum do
-      Map.merge(map, %{enum: enum})
-    else
-      map
-    end
-  end
-
-  defp inject_format(map, param) do
-    format = Map.get(param, :format) # could be nil
-    if format do
-      Map.merge(map, %{format: format})
-    else
-      map
-    end
-  end
-
-  defp inject_additional_properties(map, param) do
-    ap = Map.get(param, :additional_properties) # could be nil
-    if ap do
-      Map.merge(map, %{additional_properties: ap})
-    else
-      map
-    end
-  end
-
-  def inject_opt_keys(map, param) do
-    map
-    |> inject_enum(param)
-    |> inject_format(param)
-    |> inject_additional_properties(param)
-  end
-  # FIXME: remove duplication across fns above
-
-  def extract_params(%Route{method: "GET", path: path, parameters: parameters}, _config) do
+  def extract_params(%Route{method: "GET", path: path, parameters: parameters}, config) do
     for param <- parameters do
       %{ name:        param.param_key,
          description: param.desc || "",
          required:    param.required,
          type:        param.type,
          in:          param.attr_name in path && "path" || "query",
-      } |> inject_opt_keys(param)
+      } |> inject_opt_keys(param, config)
     end
   end
   def extract_params(%Route{method: "GET"}, _config), do: []
@@ -161,7 +131,7 @@ defmodule MaruSwagger.ParamsExtractor do
           :form_data -> NonGetFormDataParamsGenerator
         end
       end
-    generator.generate(param_list, path)
+    generator.generate(param_list, path, config)
   end
 
   defp judge_adapter([]),                        do: :form_data

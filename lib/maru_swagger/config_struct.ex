@@ -5,6 +5,9 @@ defmodule MaruSwagger.ConfigStruct do
     :force_json,     # [boolean] force JSON for all params instead of formData
     :pretty,         # [boolean] should JSON output be prettified?
     :swagger_inject, # [keyword list] key-values to inject directly into root of Swagger JSON
+    # For custom parameter types, additional conversions may be needed for OAS compliance:
+    :type_transform, # %{} :: %{}, %{} ≈ Maru.Struct.Parameter.Information
+    :param_opt_keys, # [keywords] additional keywords that type_transform may add to params
   ]
 
   def from_opts(opts) do
@@ -13,6 +16,8 @@ defmodule MaruSwagger.ConfigStruct do
     force_json     = opts |> Keyword.get(:force_json, false)
     pretty         = opts |> Keyword.get(:pretty, false)
     swagger_inject = opts |> Keyword.get(:swagger_inject, []) |> Keyword.put_new_lazy(:basePath, base_path_func(module)) |> check_swagger_inject_keys
+    type_transform = opts |> Keyword.get(:type_transform)
+    param_opt_keys = opts |> Keyword.get(:param_opt_keys)
 
     %__MODULE__{
       path: path,
@@ -20,6 +25,8 @@ defmodule MaruSwagger.ConfigStruct do
       force_json: force_json,
       pretty: pretty,
       swagger_inject: swagger_inject,
+      type_transform: type_transform,
+      param_opt_keys: param_opt_keys,
     }
   end
 
