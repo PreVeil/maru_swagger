@@ -51,7 +51,13 @@ defmodule MaruSwagger.ResponseFormatterTest do
                   "application/json",
                   "application/vnd.api+json"
                 ]
-              ]
+              ],
+              info: %{
+                title: "look title",
+                version: "v123",
+                description: "Swagger API for BasicTest.API",
+                look: "extra keys don't hurt anything"
+              }
 
       mount MaruSwagger.ResponseFormatterTest.BasicTest.Homepage
     end
@@ -71,6 +77,13 @@ defmodule MaruSwagger.ResponseFormatterTest do
       json = get_response(BasicTest.API, conn(:get, "/swagger/v1.json"))
       assert json.basePath == "/api"
       assert json.host == "myapi.com"
+
+      # Custom info may be inserted, without much restriction:
+      %{info: %{title: t, version: v, description: d, look: l}} = json
+      assert t == "look title"
+      assert v == "v123"
+      assert d == "Swagger API for BasicTest.API"
+      assert l == "extra keys don't hurt anything"
     end
   end
 end
