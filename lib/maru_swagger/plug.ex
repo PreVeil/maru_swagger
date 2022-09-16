@@ -51,7 +51,7 @@ defmodule MaruSwagger.Plug do
   end
 
   # Navigate parameter information (and potential children):
-  defp postwalk_params(%{type: "map", children: children}=info, f) do
+  defp postwalk_params(%{children: [_ | _]=children}=info, f) do
     info = f.(info)
     children = Enum.map(children, &postwalk_params(&1, f))
     Map.merge(info, %{children: children})
