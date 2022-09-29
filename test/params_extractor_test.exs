@@ -28,7 +28,13 @@ defmodule MaruSwagger.ParamsExtractorTest do
     test "force json" do
       route_info = route_from_module(BasicPostApi, "POST", ["res1"])
       assert [
-        %{description: "", in: "body", name: "body", required: false, schema: %{properties: %{"email" => %{description: "", required: true, type: "string"}, "user_name" => %{description: "", required: true, type: "string"}}}}
+        %{description: "", in: "body", name: "body",
+          required: false,
+          schema: %{
+            required: ["user_name", "email"],
+            properties: %{
+              "email" => %{description: "", type: "string"},
+              "user_name" => %{description: "", type: "string"}}}}
       ] == extract_params(route_info, %{force_json: true})
     end
   end
@@ -90,10 +96,11 @@ defmodule MaruSwagger.ParamsExtractorTest do
       route_info = route_from_module(BasicTest.Homepage, "POST", ["list"])
       assert [
         %{ description: "", in: "body", name: "body", required: false, schema: %{
+           required: ["id"],
            properties: %{
-             "id" => %{ description: "", required: true, type: "integer" },
+             "id" => %{ description: "", type: "integer" },
              "query" => %{ items: %{properties: %{
-               "keyword" => %{ description: "", required: false, type: "string"}
+               "keyword" => %{ description: "", type: "string"}
              }, type: "object" }, type: "array" }}}}
       ] = extract_params(route_info)
     end
@@ -101,13 +108,13 @@ defmodule MaruSwagger.ParamsExtractorTest do
     test "extracts expected swagger data from nested map params" do
       route_info = route_from_module(BasicTest.Homepage, "POST", ["map"])
       assert [
-        %{ description: "", in: "body", name: "body", required: false, schema: %{
+        %{ description: "", in: "body", name: "body", schema: %{
            properties: %{
-             "age" => %{ description: "age information", required: false, type: "integer" },
-             "email" => %{ description: "", required: true, type: "string" },
+             "age" => %{ description: "age information", type: "integer" },
+             "email" => %{ description: "", type: "string" },
              "name" => %{ type: "object", properties: %{
-               "first" => %{ description: "", required: true, type: "string" },
-               "last" => %{ description: "", required: true, type: "string" },
+               "first" => %{ description: "", type: "string" },
+               "last" => %{ description: "", type: "string" },
                           }}}}}
       ] = extract_params(route_info)
     end

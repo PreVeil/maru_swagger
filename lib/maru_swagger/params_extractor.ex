@@ -8,9 +8,12 @@ defmodule MaruSwagger.ParamsExtractor do
         param_list
         |> MaruSwagger.ParamsExtractor.filter_information
         |> Enum.partition(&(&1.attr_name in path))
-      [ format_body_params(body_param_list, config) |
-        format_path_params(path_param_list, config)
-      ]
+      fbp = format_body_params(body_param_list, config)
+      fpp = format_path_params(path_param_list, config)
+      case fbp do
+        [] -> fpp
+        _ -> [fbp | fpp]
+      end
     end
 
     defp default_body do
@@ -32,16 +35,43 @@ defmodule MaruSwagger.ParamsExtractor do
       end)
     end
 
+    # The `required` portion needs to move up a level for schema objects
+    #  (as a list of required keys); see 6.5.3 in the following spec:
+    # https://datatracker.ietf.org/doc/draft-bhutton-json-schema-validation/01/
+    defp extract_required(params) do
+      Enum.reduce(params, [],
+        fn
+          ({pk, %{required: true}}, acc) -> [pk | acc]
+          (_, acc) -> acc
+        end)
+    end
+
+    defp delete_required_entries(params) do
+      params
+      |> Enum.map(fn {k, v} -> {k, Map.delete(v, :required)} end)
+      |> Enum.into(%{})
+    end
+
+    defp handle_required(params) do
+      required = extract_required(params)
+      params = delete_required_entries(params)
+      if (required == []) do
+        %{properties: params}
+      else
+        %{required: required,
+          properties: params}
+      end
+    end
+
     defp format_body_params(param_list, config) do
       param_list
       |> Enum.map(&format_param(&1, config))
       |> case do
-        []     -> default_body()
+        []     -> []
         params ->
           params = Enum.into(params, %{})
           default_body()
-          |> put_in([:schema], %{})
-          |> put_in([:schema, :properties], params)
+          |> put_in([:schema], handle_required(params))
       end
     end
 
@@ -51,23 +81,24 @@ defmodule MaruSwagger.ParamsExtractor do
     end
 
     defp do_format_param("map", param, config) do
-      %{ type: "object",
-         properties: param.children |> Enum.map(&format_param(&1, config)) |> Enum.into(%{}),
-      }
+      params = param.children
+               |> Enum.map(&format_param(&1, config))
+               |> Enum.into(%{})
+      Map.merge(%{type: "object"}, handle_required(params))
     end
 
     defp do_format_param("list", param, config) do
+      params =  param.children
+                |> Enum.map(&format_param(&1, config))
+                |> Enum.into(%{})
       %{ type: "array",
-         items: %{
-           type: "object",
-           properties: param.children |> Enum.map(&format_param(&1, config)) |> Enum.into(%{}),
-         }
+         items: Map.merge(%{type: "object"}, handle_required(params))
       }
     end
 
     defp do_format_param({:list, type}, param, config) do
       %{ type: "array",
-         items: do_format_param(type, param, config),
+        items: do_format_param(type, param, config) |> Map.delete(:required)
       }
     end
 
