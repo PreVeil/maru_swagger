@@ -16,7 +16,7 @@ defmodule MaruSwagger.DSL do
           MaruSwagger.Plug,
           unquote(options)
           |> Keyword.drop([:only, :except])
-          |> Keyword.put(:module, __MODULE__),
+          |> Keyword.put_new(:module, __MODULE__),
           true
         }
       end
