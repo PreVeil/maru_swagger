@@ -6,7 +6,7 @@ defmodule MaruSwagger.DSL do
     guard =
       case {only, except} do
         {nil, nil} -> true
-        {nil, _}   -> not Mix.env in except
+        {nil, _}   -> Mix.env not in except
         {_,   nil} -> Mix.env in only
         _          -> raise ":only and :except are in conflict!"
       end

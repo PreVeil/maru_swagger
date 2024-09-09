@@ -7,7 +7,7 @@ defmodule MaruSwagger.ParamsExtractor do
       {path_param_list, body_param_list} =
         param_list
         |> MaruSwagger.ParamsExtractor.filter_information
-        |> Enum.partition(&(&1.attr_name in path))
+        |> Enum.split_with(&(&1.attr_name in path))
       fbp = format_body_params(body_param_list, config)
       fpp = format_path_params(path_param_list, config)
       case fbp do
