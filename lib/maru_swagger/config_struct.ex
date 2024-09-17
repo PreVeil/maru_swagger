@@ -6,11 +6,11 @@ defmodule MaruSwagger.ConfigStruct do
     :pretty,         # [boolean] should JSON output be prettified?
     :swagger_inject, # [keyword list] key-values to inject directly into root of Swagger JSON
     :info,           # [map] added beneath "info" key of produced JSON
+    :examples,       # [map] mapping of parameter names to example inputs
     # For custom parameter types, additional conversions may be needed for OAS compliance:
     :type_transform, # %{} :: %{}, %{} ≈ Maru.Struct.Parameter.Information
     :param_opt_keys, # [keywords] additional keywords that type_transform may add to params
   ]
-
 
   def from_opts(opts) do
     path           = opts |> Keyword.fetch!(:at) |> Maru.Builder.Path.split
@@ -18,7 +18,8 @@ defmodule MaruSwagger.ConfigStruct do
     force_json     = opts |> Keyword.get(:force_json, false)
     pretty         = opts |> Keyword.get(:pretty, false)
     swagger_inject = opts |> Keyword.get(:swagger_inject, []) |> Keyword.put_new_lazy(:basePath, base_path_func(module)) |> check_swagger_inject_keys
-    info = opts |> Keyword.get(:info) # No formatting or exclusion; use map directly.
+    info           = opts |> Keyword.get(:info) # No formatting or exclusion; use map directly.
+    examples       = opts |> Keyword.get(:examples)
     type_transform = opts |> Keyword.get(:type_transform)
     param_opt_keys = opts |> Keyword.get(:param_opt_keys)
 
@@ -29,6 +30,7 @@ defmodule MaruSwagger.ConfigStruct do
       pretty: pretty,
       swagger_inject: swagger_inject,
       info: info,
+      examples: examples,
       type_transform: type_transform,
       param_opt_keys: param_opt_keys,
     }
@@ -55,12 +57,12 @@ defmodule MaruSwagger.ConfigStruct do
 
   defp check_swagger_inject_keys(swagger_inject) do
     swagger_inject |> Enum.filter(fn {k, v} ->
-      k in allowed_swagger_fields() and not v in [nil, ""]
+      k in allowed_swagger_fields() and v not in [nil, ""]
     end)
   end
 
   defp allowed_swagger_fields do
-    [:host, :basePath, :schemes, :consumes, :produces]
+    [:host, :basePath, :schemes]
   end
 
 end
