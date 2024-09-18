@@ -12,6 +12,7 @@ defmodule MaruSwagger.ParamsExtractor do
         |> Enum.partition(&(&1.attr_name in path))
       {
         format_path_params(path_param_list, config),
+        format_body_params(body_param_list, config)
       }
     end
 
@@ -56,8 +57,9 @@ defmodule MaruSwagger.ParamsExtractor do
     end
 
     defp format_body_param("list", param, config) do
-      %{
+      Map.merge %{
         type: "array",
+        maxItems: 9007199254740991,
         items: %{
           type: "object",
           properties:
@@ -66,14 +68,15 @@ defmodule MaruSwagger.ParamsExtractor do
             end
             |> Map.new()
         }
-      }
+      }, Map.take(param, [:maxItems])
     end
 
     defp format_body_param({:list, type}, param, config) do
-      %{
+      Map.merge %{
         type: "array",
+        maxItems: 9007199254740991,
         items: format_body_param(type, param, config)
-      }
+      }, Map.take(param, [:maxItems])
     end
 
     defp format_body_param(type, param, config) do
@@ -91,7 +94,7 @@ defmodule MaruSwagger.ParamsExtractor do
   end
 
   def populate_param_schema(formatted, input) do
-    Map.put(formatted, :schema, Map.take(input, [:type, schema_fields()]))
+    Map.put(formatted, :schema, Map.take(input, [:type | schema_fields()]))
   end
 
   alias Maru.Struct.Route
