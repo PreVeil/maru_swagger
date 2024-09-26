@@ -2,135 +2,99 @@ defmodule MaruSwagger.ParamsExtractor do
   alias Maru.Struct.Parameter.Information, as: PI
   alias Maru.Struct.Dependent.Information, as: DI
 
+  def schema_fields(), do: [:maxLength, :pattern, :format, :maximum, :minimum, :items, :maxItems]
+
   defmodule NonGetBodyParamsGenerator do
     def generate(param_list, path, config) do
       {path_param_list, body_param_list} =
         param_list
         |> MaruSwagger.ParamsExtractor.filter_information
         |> Enum.split_with(&(&1.attr_name in path))
-      fbp = format_body_params(body_param_list, config)
-      fpp = format_path_params(path_param_list, config)
-      case fbp do
-        [] -> fpp
-        _ -> [fbp | fpp]
-      end
-    end
-
-    defp default_body do
-      %{ name: "body",
-         in: "body",
-         description: "",
-         required: false,
-       }
+      {
+        format_path_params(path_param_list, config),
+        format_body_params(body_param_list, config)
+      }
     end
 
     defp format_path_params(param_list, config) do
       Enum.map(param_list, fn param ->
         %{ name:        param.param_key,
            description: param.desc || "",
-           type:        param.type,
            required:    param.required,
            in:          "path",
-        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
+        } |> MaruSwagger.ParamsExtractor.populate_param_schema(param)
       end)
+      |> Enum.map(&MaruSwagger.ParamsExtractor.include_example(&1, config))
     end
 
-    # The `required` portion needs to move up a level for schema objects
-    #  (as a list of required keys); see 6.5.3 in the following spec:
-    # https://datatracker.ietf.org/doc/draft-bhutton-json-schema-validation/01/
-    defp extract_required(params) do
-      Enum.reduce(params, [],
-        fn
-          ({pk, %{required: true}}, acc) -> [pk | acc]
-          (_, acc) -> acc
-        end)
-    end
+    defp format_body_params(params, config) do
+      formatted = %{
+        type: "object",
+        properties:
+          for param <- params do
+            {param.param_key, format_body_param(param.type, param, config)}
+          end
+          |> Map.new()
+      }
 
-    defp delete_required_entries(params) do
-      params
-      |> Enum.map(fn {k, v} -> {k, Map.delete(v, :required)} end)
-      |> Enum.into(%{})
-    end
-
-    defp handle_required(params) do
-      required = extract_required(params)
-      params = delete_required_entries(params)
-      if (required == []) do
-        %{properties: params}
+      required = for p <- params, p.required, do: p.param_key
+      if required != [] do
+        Map.put(formatted, :required, required)
       else
-        %{required: required,
-          properties: params}
+        formatted
       end
     end
 
-    defp format_body_params(param_list, config) do
-      param_list
-      |> Enum.map(&format_param(&1, config))
-      |> case do
-        []     -> []
-        params ->
-          params = Enum.into(params, %{})
-          default_body()
-          |> put_in([:schema], handle_required(params))
+    defp format_body_param("map", param, config) do
+      %{
+        type: "object",
+        properties:
+          for child <- param.children do
+            {child.param_key, format_body_param(child.type, child, config)}
+          end
+          |> Map.new()
+      }
+    end
+
+    defp format_body_param("list", param, config) do
+      Map.merge %{
+        type: "array",
+        maxItems: 9007199254740991,
+        items: %{
+          type: "object",
+          properties:
+            for child <- param.children do
+              {child.param_key, format_body_param(child.type, child, config)}
+            end
+            |> Map.new()
+        }
+      }, Map.take(param, [:maxItems])
+    end
+
+    defp format_body_param({:list, type}, param, config) do
+      Map.merge %{
+        type: "array",
+        maxItems: 9007199254740991,
+        items: format_body_param(type, param, config)
+      }, Map.take(param, [:maxItems])
+    end
+
+    defp format_body_param(type, param, config) do
+      formatted = %{
+        type: type,
+        description: Map.get(param, :desc) || ""
+      }
+      formatted = if Map.has_key?(config.examples, param.param_key) do
+        Map.put(formatted, :example, Map.get(config.examples, param.param_key))
+      else
+        formatted
       end
-    end
-
-
-    defp format_param(param, config) do
-      {param.param_key, do_format_param(param.type, param, config)}
-    end
-
-    defp do_format_param("map", param, config) do
-      params = param.children
-               |> Enum.map(&format_param(&1, config))
-               |> Enum.into(%{})
-      Map.merge(%{type: "object"}, handle_required(params))
-    end
-
-    defp do_format_param("list", param, config) do
-      params =  param.children
-                |> Enum.map(&format_param(&1, config))
-                |> Enum.into(%{})
-      %{ type: "array",
-         items: Map.merge(%{type: "object"}, handle_required(params))
-      }
-    end
-
-    defp do_format_param({:list, type}, param, config) do
-      %{ type: "array",
-        items: do_format_param(type, param, config) |> Map.delete(:required)
-      }
-    end
-
-    defp do_format_param(type, param, config) do
-      %{ description: param.desc || "",
-         type:        type,
-         required:    param.required,
-      }
-      |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
-    end
-
-  end
-
-  defmodule NonGetFormDataParamsGenerator do
-    def generate(param_list, path, config) do
-      param_list
-      |> MaruSwagger.ParamsExtractor.filter_information
-      |> Enum.map(fn param ->
-        %{ name:        param.param_key,
-           description: param.desc || "",
-           type:        param.type,
-           required:    param.required,
-           in:          param.attr_name in path && "path" || "formData",
-        } |> MaruSwagger.ParamsExtractor.inject_opt_keys(param, config)
-      end)
+      Map.merge(formatted, Map.take(param, MaruSwagger.ParamsExtractor.schema_fields()))
     end
   end
 
-  def inject_opt_keys(map, param, config) do
-    opts = [:enum | (Map.get(config, :param_opt_keys) || [])]
-    opts_map = Map.take(param, opts)
-    Map.merge(map, opts_map)
+  def populate_param_schema(formatted, input) do
+    Map.put(formatted, :schema, Map.take(input, [:type | schema_fields()]))
   end
 
   alias Maru.Struct.Route
@@ -139,37 +103,31 @@ defmodule MaruSwagger.ParamsExtractor do
   end
 
   def extract_params(%Route{method: "GET", path: path, parameters: parameters}, config) do
-    for %PI{} = param <- parameters do
+    url_params = for %PI{} = param <- parameters do
       %{ name:        param.param_key,
          description: param.desc || "",
          required:    param.required,
-         type:        param.type,
          in:          param.attr_name in path && "path" || "query",
-      } |> inject_opt_keys(param, config)
+      } |> populate_param_schema(param)
     end
+    |> Enum.map(&include_example(&1, config))
+    {url_params, %{}}
   end
-  def extract_params(%Route{method: "GET"}, _config), do: []
-  def extract_params(%Route{parameters: []}, _config), do: []
+  def extract_params(%Route{method: "GET"}, _config), do: {[], %{}}
+  def extract_params(%Route{parameters: []}, _config), do: {[], %{}}
 
   def extract_params(%Route{parameters: param_list, path: path}, config) do
     param_list = filter_information(param_list)
-    generator =
-      if config.force_json do
-        NonGetBodyParamsGenerator
-      else
-        case judge_adapter(param_list) do
-          :body      -> NonGetBodyParamsGenerator
-          :form_data -> NonGetFormDataParamsGenerator
-        end
-      end
-    generator.generate(param_list, path, config)
+    NonGetBodyParamsGenerator.generate(param_list, path, config)
   end
 
-  defp judge_adapter([]),                        do: :form_data
-  defp judge_adapter([%{type: "list"} | _]),     do: :body
-  defp judge_adapter([%{type: "map"} | _]),      do: :body
-  defp judge_adapter([%{type: {:list, _}} | _]), do: :body
-  defp judge_adapter([_ | t]),                   do: judge_adapter(t)
+  def include_example(param = %{name: name}, %{examples: examples}) do
+    if Map.has_key?(examples, name) do
+      Map.put(param, :example, Map.get(examples, name))
+    else
+      param
+    end
+  end
 
   def filter_information(param_list) do
     Enum.filter(param_list, fn

@@ -117,7 +117,7 @@ defmodule MaruSwagger.Plug do
   end
 
   defp extract_route(ep, adapter, config) do
-    params = MaruSwagger.ParamsExtractor.extract_params(ep, config)
+    {url_params, body_params} = MaruSwagger.ParamsExtractor.extract_params(ep, config)
     path   = adapter.path_for_params(ep.path, ep.version)
     method = case ep.method do
       {:_, [], nil} -> "MATCH"
@@ -127,7 +127,8 @@ defmodule MaruSwagger.Plug do
       desc:    ep.desc,
       method:  method,
       path:    path,
-      params:  params,
+      url_params:  url_params,
+      body_params: body_params,
       tag:     tag_name(ep.version),
     }
   end
