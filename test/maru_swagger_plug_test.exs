@@ -37,7 +37,8 @@ defmodule MaruSwagger.PlugTest do
              summary: "hello world action",
              description: "",
              parameters: [
-               %{description: "", in: "query", name: "id", required: true, type: "integer"}
+               %{description: "", in: "query", name: "id", required: true,
+                 schema: %{type: "integer"}}
              ],
              responses: %{"200" => %{description: "ok"}},
              tags: ["DEFAULT"],

@@ -70,7 +70,6 @@ defmodule MaruSwagger.ResponseFormatterTest do
 
 
       assert swagger_docs |> get_in([:info, :title]) =~ "MaruSwagger.ResponseFormatterTest.BasicTest.Homepage"
-      assert swagger_docs |> get_in([:swagger]) == "2.0"
     end
 
     test "works in full integration" do

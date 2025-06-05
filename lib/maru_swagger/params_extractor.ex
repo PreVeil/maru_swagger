@@ -84,11 +84,12 @@ defmodule MaruSwagger.ParamsExtractor do
         type: type,
         description: Map.get(param, :desc) || ""
       }
-      formatted = if Map.has_key?(config.examples, param.param_key) do
-        Map.put(formatted, :example, Map.get(config.examples, param.param_key))
-      else
-        formatted
+      param_key = param.param_key
+      formatted = case config do
+        %{examples: %{^param_key => example}} -> Map.put(formatted, :example, example)
+        _ -> formatted
       end
+
       Map.merge(formatted, Map.take(param, MaruSwagger.ParamsExtractor.schema_fields()))
     end
   end
@@ -122,10 +123,9 @@ defmodule MaruSwagger.ParamsExtractor do
   end
 
   def include_example(param = %{name: name}, %{examples: examples}) do
-    if Map.has_key?(examples, name) do
-      Map.put(param, :example, Map.get(examples, name))
-    else
-      param
+    case examples do
+      %{^name => nm} -> Map.put(param, :example, nm)
+      _ -> param
     end
   end
 
