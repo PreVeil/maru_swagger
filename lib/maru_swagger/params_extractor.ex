@@ -23,8 +23,8 @@ defmodule MaruSwagger.ParamsExtractor do
            required:    param.required,
            in:          "path",
         } |> MaruSwagger.ParamsExtractor.populate_param_schema(param)
+          |> MaruSwagger.ParamsExtractor.include_example(config)
       end)
-      |> Enum.map(&MaruSwagger.ParamsExtractor.include_example(&1, config))
     end
 
     defp format_body_params(params, config) do
@@ -109,8 +109,8 @@ defmodule MaruSwagger.ParamsExtractor do
          required:    param.required,
          in:          param.attr_name in path && "path" || "query",
       } |> populate_param_schema(param)
+        |> include_example(config)
     end
-    |> Enum.map(&include_example(&1, config))
     {url_params, %{}}
   end
   def extract_params(%Route{method: "GET"}, _config), do: {[], %{}}
