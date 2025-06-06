@@ -8,7 +8,7 @@ defmodule MaruSwagger.Plug do
   end
 
   def call(%Conn{path_info: path}=conn, %ConfigStruct{path: path}=config) do
-    resp = generate(config) |> Poison.encode!(pretty: config.pretty)
+    resp = generate(config) |> Jason.encode!(pretty: config.pretty)
     conn
     |> Conn.put_resp_header("access-control-allow-origin", "*")
     |> Conn.put_resp_content_type("application/json")
@@ -100,7 +100,7 @@ defmodule MaruSwagger.Plug do
     adapter = Maru.Builder.Versioning.get_adapter(c[:using])
     %ConfigStruct{type_transform: user_type_transform_fn} = config
     routes =
-      config.module.__routes__
+      config.module.__routes__()
       |> Enum.map(fn route ->
         parameters = modify_parameters_types(route, user_type_transform_fn)
         %{ route | parameters: parameters }

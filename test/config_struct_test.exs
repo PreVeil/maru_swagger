@@ -22,7 +22,7 @@ defmodule MaruSwagger.ConfigStructTest do
         pretty: false,
         swagger_inject: []
       } = init(
-        at: "swagger/v1",
+        at: "swagger/v1"
       )
     end
 
@@ -39,7 +39,7 @@ defmodule MaruSwagger.ConfigStructTest do
         swagger_inject: []
       } = init(
         at: "swagger/v1",
-        pretty: true,
+        pretty: true
       )
     end
 
@@ -50,7 +50,7 @@ defmodule MaruSwagger.ConfigStructTest do
         swagger_inject: []
       } = init(
         at: "swagger/v1",
-        pretty: true,
+        pretty: true
       )
     end
   end
