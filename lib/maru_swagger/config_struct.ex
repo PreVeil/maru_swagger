@@ -36,24 +36,32 @@ defmodule MaruSwagger.ConfigStruct do
     }
   end
 
-  defp base_path_func(module) do
+  defp base_path_func(_module) do
     fn ->
       [ "" |
-        if Code.ensure_loaded?(Phoenix) do
-          phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
-          phoenix_module.__routes__ |> Enum.filter(fn r ->
-            match?(%{kind: :forward, plug: ^module}, r)
-          end)
-          |> case do
-            [%{path: p}] -> p |> String.split("/", trim: true)
-            _            -> []
-          end
-        else
+        #if Code.ensure_loaded?(Phoenix) do
+        #  phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
+        #  phoenix_module.__routes__ |> Enum.filter(fn r ->
+        #    match?(%{kind: :forward, plug: ^module}, r)
+        #  end)
+        #  |> case do
+        #    [%{path: p}] -> p |> String.split("/", trim: true)
+        #    _            -> []
+        #  end
+        #else
           []
-        end
+        #end
       ] |> Enum.join("/")
     end
   end
+  # TODO: Find a better way to avoid the following compile warning for non-Phoenix projects.
+  #    warning: Mix.Phoenix.base/0 is undefined (module Mix.Phoenix is not available or is yet to be defined)
+  #    │
+  # 43 │           phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
+  #    │                                                      ~
+  #    │
+  #    └─ lib/maru_swagger/config_struct.ex:43:54: MaruSwagger.ConfigStruct.base_path_func/1
+  # For now, taking the easy way out and just commenting out that portion.
 
   defp check_swagger_inject_keys(swagger_inject) do
     swagger_inject |> Enum.filter(fn {k, v} ->

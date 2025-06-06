@@ -19,7 +19,7 @@ defmodule TestHelper do
       # TestHelper.route_from_module(BasicTest.Homepage, "v1", "POST", ["complex"])
   """
   def route_from_module(module, version \\ nil, method, path_list) do
-    route = Enum.find(module.__routes__, fn x ->
+    route = Enum.find(module.__routes__(), fn x ->
       x.path == path_list &&
         x.method == String.upcase(method) &&
         x.version == version
