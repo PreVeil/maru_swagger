@@ -7,7 +7,7 @@ defmodule MaruSwagger.ResponseFormatterTest do
   describe "basic test" do
     def get_response(module, conn) do
       res = module.call(conn, [])
-      {:ok, json} = res.resp_body  |> Poison.decode(keys: :atoms)
+      {:ok, json} = res.resp_body  |> Jason.decode(keys: :atoms)
       json
     end
 
@@ -70,7 +70,6 @@ defmodule MaruSwagger.ResponseFormatterTest do
 
 
       assert swagger_docs |> get_in([:info, :title]) =~ "MaruSwagger.ResponseFormatterTest.BasicTest.Homepage"
-      assert swagger_docs |> get_in([:swagger]) == "2.0"
     end
 
     test "works in full integration" do

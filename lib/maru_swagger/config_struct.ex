@@ -6,11 +6,11 @@ defmodule MaruSwagger.ConfigStruct do
     :pretty,         # [boolean] should JSON output be prettified?
     :swagger_inject, # [keyword list] key-values to inject directly into root of Swagger JSON
     :info,           # [map] added beneath "info" key of produced JSON
+    :examples,       # [map] mapping of parameter names to example inputs
     # For custom parameter types, additional conversions may be needed for OAS compliance:
     :type_transform, # %{} :: %{}, %{} ≈ Maru.Struct.Parameter.Information
     :param_opt_keys, # [keywords] additional keywords that type_transform may add to params
   ]
-
 
   def from_opts(opts) do
     path           = opts |> Keyword.fetch!(:at) |> Maru.Builder.Path.split
@@ -18,7 +18,8 @@ defmodule MaruSwagger.ConfigStruct do
     force_json     = opts |> Keyword.get(:force_json, false)
     pretty         = opts |> Keyword.get(:pretty, false)
     swagger_inject = opts |> Keyword.get(:swagger_inject, []) |> Keyword.put_new_lazy(:basePath, base_path_func(module)) |> check_swagger_inject_keys
-    info = opts |> Keyword.get(:info) # No formatting or exclusion; use map directly.
+    info           = opts |> Keyword.get(:info) # No formatting or exclusion; use map directly.
+    examples       = opts |> Keyword.get(:examples)
     type_transform = opts |> Keyword.get(:type_transform)
     param_opt_keys = opts |> Keyword.get(:param_opt_keys)
 
@@ -29,29 +30,38 @@ defmodule MaruSwagger.ConfigStruct do
       pretty: pretty,
       swagger_inject: swagger_inject,
       info: info,
+      examples: examples,
       type_transform: type_transform,
       param_opt_keys: param_opt_keys,
     }
   end
 
-  defp base_path_func(module) do
+  defp base_path_func(_module) do
     fn ->
       [ "" |
-        if Code.ensure_loaded?(Phoenix) do
-          phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
-          phoenix_module.__routes__ |> Enum.filter(fn r ->
-            match?(%{kind: :forward, plug: ^module}, r)
-          end)
-          |> case do
-            [%{path: p}] -> p |> String.split("/", trim: true)
-            _            -> []
-          end
-        else
+        #if Code.ensure_loaded?(Phoenix) do
+        #  phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
+        #  phoenix_module.__routes__ |> Enum.filter(fn r ->
+        #    match?(%{kind: :forward, plug: ^module}, r)
+        #  end)
+        #  |> case do
+        #    [%{path: p}] -> p |> String.split("/", trim: true)
+        #    _            -> []
+        #  end
+        #else
           []
-        end
+        #end
       ] |> Enum.join("/")
     end
   end
+  # TODO: Find a better way to avoid the following compile warning for non-Phoenix projects.
+  #    warning: Mix.Phoenix.base/0 is undefined (module Mix.Phoenix is not available or is yet to be defined)
+  #    │
+  # 43 │           phoenix_module = Module.concat(Mix.Phoenix.base(), "Router")
+  #    │                                                      ~
+  #    │
+  #    └─ lib/maru_swagger/config_struct.ex:43:54: MaruSwagger.ConfigStruct.base_path_func/1
+  # For now, taking the easy way out and just commenting out that portion.
 
   defp check_swagger_inject_keys(swagger_inject) do
     swagger_inject |> Enum.filter(fn {k, v} ->
@@ -60,7 +70,7 @@ defmodule MaruSwagger.ConfigStruct do
   end
 
   defp allowed_swagger_fields do
-    [:host, :basePath, :schemes, :consumes, :produces]
+    [:host, :basePath, :schemes]
   end
 
 end

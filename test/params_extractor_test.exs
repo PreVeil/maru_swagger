@@ -19,23 +19,25 @@ defmodule MaruSwagger.ParamsExtractorTest do
 
     test "works with basic POST params" do
       route_info = route_from_module(BasicPostApi, "POST", ["res1"])
-      assert [
-        %{description: "", in: "formData", name: "user_name", required: true, type: "string"},
-        %{description: "", in: "formData", name: "email", required: true, type: "string"},
-      ] == extract_params(route_info)
+      assert {[], %{
+        type: "object",
+        required: ["user_name", "email"],
+        properties: %{
+          "user_name" => %{description: "", type: "string"},
+          "email" => %{description: "", type: "string"},
+        }
+      }} == extract_params(route_info)
     end
 
     test "force json" do
       route_info = route_from_module(BasicPostApi, "POST", ["res1"])
-      assert [
-        %{description: "", in: "body", name: "body",
-          required: false,
-          schema: %{
-            required: ["user_name", "email"],
-            properties: %{
-              "email" => %{description: "", type: "string"},
-              "user_name" => %{description: "", type: "string"}}}}
-      ] == extract_params(route_info, %{force_json: true})
+      assert {[], %{
+        type: "object",
+        required: ["user_name", "email"],
+        properties: %{
+          "email" => %{description: "", type: "string"},
+          "user_name" => %{description: "", type: "string"}}}
+      } == extract_params(route_info, %{force_json: true})
     end
   end
 
@@ -94,39 +96,49 @@ defmodule MaruSwagger.ParamsExtractorTest do
 
     test "extracts expected swagger data from nested list params" do
       route_info = route_from_module(BasicTest.Homepage, "POST", ["list"])
-      assert [
-        %{ description: "", in: "body", name: "body", required: false, schema: %{
-           required: ["id"],
-           properties: %{
-             "id" => %{ description: "", type: "integer" },
-             "query" => %{ items: %{properties: %{
-               "keyword" => %{ description: "", type: "string"}
-             }, type: "object" }, type: "array" }}}}
-      ] = extract_params(route_info)
+      assert {[], %{
+        required: ["id"],
+        properties: %{
+          "id"      => %{description: "", type: "integer" },
+          "query"   => %{
+            items: %{
+              properties: %{
+                "keyword" => %{description: "", type: "string"}
+              },
+              type: "object"
+            },
+            type: "array" }}}
+      } = extract_params(route_info)
     end
 
     test "extracts expected swagger data from nested map params" do
       route_info = route_from_module(BasicTest.Homepage, "POST", ["map"])
-      assert [
-        %{ description: "", in: "body", name: "body", schema: %{
-           properties: %{
-             "age" => %{ description: "age information", type: "integer" },
-             "email" => %{ description: "", type: "string" },
-             "name" => %{ type: "object", properties: %{
-               "first" => %{ description: "", type: "string" },
-               "last" => %{ description: "", type: "string" },
-                          }}}}}
-      ] = extract_params(route_info)
+      assert {[], %{
+        type: "object",
+        required: ["name", "email"],
+        properties: %{
+          "age"   => %{description: "age information", type: "integer" },
+          "email" => %{description: "",                type: "string" },
+          "name"  => %{type: "object", properties: %{
+            "first" => %{description: "", type: "string" },
+            "last" => %{description: "",  type: "string" }
+          }}
+        }
+      }} = extract_params(route_info)
     end
 
     test "dependent params" do
       route_info = route_from_module(BasicTest.Homepage, "POST", ["dependent"])
-      assert [
-        %{name: "foo", required: true, type: "integer"},
-        %{name: "bar", required: false, type: "string"},
-        %{name: "qux", required: false, type: "string"},
-        %{name: "baz", required: false, type: "string"},
-      ] = extract_params(route_info)
+      assert {_, %{
+        type: "object",
+        required: ["foo"],
+        properties: %{
+          "foo" => %{type: "integer"},
+          "bar" => %{type: "string"},
+          "qux" => %{type: "string"},
+          "baz" => %{type: "string"}
+        }
+      }} = extract_params(route_info)
     end
   end
 
@@ -145,13 +157,15 @@ defmodule MaruSwagger.ParamsExtractorTest do
 
     test "one-line nested list test" do
       route_info = route_from_module(OneLineNestedList, "POST", ["path"])
-      assert [
-        %{ description: "", in: "body", name: "body", required: false, schema: %{
-             properties: %{"foo" => %{
-               type: "array", items: %{type: "string"}
-             }}
-        }}
-      ] = extract_params(route_info)
+      assert {_, %{
+        type: "object",
+        required: ["foo"],
+        properties: %{
+          "foo" => %{
+            type: "array", items: %{type: "string"}
+          }
+        }
+      }} = extract_params(route_info)
     end
   end
 

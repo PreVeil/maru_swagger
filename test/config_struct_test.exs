@@ -22,7 +22,7 @@ defmodule MaruSwagger.ConfigStructTest do
         pretty: false,
         swagger_inject: []
       } = init(
-        at: "swagger/v1",
+        at: "swagger/v1"
       )
     end
 
@@ -39,7 +39,7 @@ defmodule MaruSwagger.ConfigStructTest do
         swagger_inject: []
       } = init(
         at: "swagger/v1",
-        pretty: true,
+        pretty: true
       )
     end
 
@@ -50,25 +50,22 @@ defmodule MaruSwagger.ConfigStructTest do
         swagger_inject: []
       } = init(
         at: "swagger/v1",
-        pretty: true,
+        pretty: true
       )
     end
   end
 
+  # Note: `consumes` and `produces` were eliminated in OpenAPI 3.x.
   describe "swagger_inject" do
     @only_valid_fields  [
       host: "myapi.com",
-      schemes: ["http"],
-      consumes: ["application/json"],
-      produces: ["application/json", "application/vnd.api+json"]
+      schemes: ["http"]
     ]
 
     @some_invalid_fields [
       host: "myapi.com",
       invalidbasePath: "/",
-      schemes: ["http"],
-      consumes: ["application/json"],
-      produces: ["application/json", "application/vnd.api+json"]
+      schemes: ["http"]
     ]
     test "only allowes pre-defined fields" do
       res = init(
@@ -86,9 +83,7 @@ defmodule MaruSwagger.ConfigStructTest do
       refute res.swagger_inject == @some_invalid_fields
       assert res.swagger_inject == [
         host: "myapi.com",
-        schemes: ["http"],
-        consumes: ["application/json"],
-        produces: ["application/json", "application/vnd.api+json"]
+        schemes: ["http"]
       ]
     end
   end

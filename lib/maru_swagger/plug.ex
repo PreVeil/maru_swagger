@@ -8,7 +8,7 @@ defmodule MaruSwagger.Plug do
   end
 
   def call(%Conn{path_info: path}=conn, %ConfigStruct{path: path}=config) do
-    resp = generate(config) |> Poison.encode!(pretty: config.pretty)
+    resp = generate(config) |> Jason.encode!(pretty: config.pretty)
     conn
     |> Conn.put_resp_header("access-control-allow-origin", "*")
     |> Conn.put_resp_content_type("application/json")
@@ -100,7 +100,7 @@ defmodule MaruSwagger.Plug do
     adapter = Maru.Builder.Versioning.get_adapter(c[:using])
     %ConfigStruct{type_transform: user_type_transform_fn} = config
     routes =
-      config.module.__routes__
+      config.module.__routes__()
       |> Enum.map(fn route ->
         parameters = modify_parameters_types(route, user_type_transform_fn)
         %{ route | parameters: parameters }
@@ -117,7 +117,7 @@ defmodule MaruSwagger.Plug do
   end
 
   defp extract_route(ep, adapter, config) do
-    params = MaruSwagger.ParamsExtractor.extract_params(ep, config)
+    {url_params, body_params} = MaruSwagger.ParamsExtractor.extract_params(ep, config)
     path   = adapter.path_for_params(ep.path, ep.version)
     method = case ep.method do
       {:_, [], nil} -> "MATCH"
@@ -127,7 +127,8 @@ defmodule MaruSwagger.Plug do
       desc:    ep.desc,
       method:  method,
       path:    path,
-      params:  params,
+      url_params:  url_params,
+      body_params: body_params,
       tag:     tag_name(ep.version),
     }
   end

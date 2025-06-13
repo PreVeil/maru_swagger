@@ -55,7 +55,8 @@ defmodule MaruVersioningTest do
             summary: "basic get",
             description: "detail of basic get",
             parameters: [
-              %{description: "", in: "query", name: "id", required: true, type: "integer"}
+              %{description: "", in: "query", name: "id", required: true,
+                schema: %{type: "integer"}}
             ],
             responses: %{
               "default" => %{description: "ok"},
